@@ -163,6 +163,19 @@ main { max-width: 760px; margin: 0 auto; }
   box-shadow: 0 2px 8px rgba(0,0,0,.2); white-space: nowrap;
 }
 #map-click-indicator.active { display: block; }
+#map-click-overlay {
+  position: absolute; inset: 0; z-index: 6;
+  display: none; cursor: crosshair;
+}
+#map-click-overlay.active { display: block; }
+#map-click-cancel {
+  position: absolute; bottom: 100px; left: 50%; transform: translateX(-50%);
+  background: #fff; color: var(--risk); border: 2px solid var(--risk);
+  border-radius: 20px; padding: 10px 20px; font-size: 14px; font-weight: 700;
+  display: none; z-index: 10; cursor: pointer; white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0,0,0,.2);
+}
+#map-click-cancel.active { display: block; }
 
 /* ---------- Tela Pontos ---------- */
 #view-points { padding: 16px; }
@@ -470,7 +483,9 @@ h2.sec { font-size: 13px; text-transform: uppercase; letter-spacing: .7px; color
   <div class="view on" id="view-map">
     <div id="map-container">
       <div id="map"></div>
+      <div id="map-click-overlay" onclick="handleMapOverlayClick(event)"></div>
       <div id="map-click-indicator">📍 Toque no mapa para marcar o ponto</div>
+      <button id="map-click-cancel" onclick="cancelMapClickMode()">✕ Cancelar</button>
       <div id="layers-panel">
         <h3>🗂 Camadas visíveis</h3>
         <div id="layers-list"></div>
@@ -1124,8 +1139,41 @@ function startMapClickMode() {
   document.getElementById('overlay-point').classList.remove('open');
   state.mapClickMode = true;
   goTo('map');
-  document.getElementById('map-click-indicator').classList.add('active');
+  setTimeout(() => {
+    document.getElementById('map-click-indicator').classList.add('active');
+    document.getElementById('map-click-overlay').classList.add('active');
+    document.getElementById('map-click-cancel').classList.add('active');
+  }, 300);
   showToast('Toque no mapa para marcar o ponto', 5000);
+}
+
+function handleMapOverlayClick(event) {
+  if (!state.mapClickMode) return;
+  const container = document.getElementById('map-container');
+  const rect = container.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const y = event.clientY - rect.top;
+
+  // Converter pixels para coordenadas geográficas via Google Maps
+  const bounds = state.gmap.getBounds();
+  if (!bounds) return;
+  const ne = bounds.getNorthEast();
+  const sw = bounds.getSouthWest();
+  const mapWidth = rect.width;
+  const mapHeight = rect.height;
+  const lng = sw.lng() + (x / mapWidth) * (ne.lng() - sw.lng());
+  const lat = ne.lat() - (y / mapHeight) * (ne.lat() - sw.lat());
+
+  state.tempCoords = { lat, lng, accuracy: null };
+  cancelMapClickMode();
+  openNewPoint();
+}
+
+function cancelMapClickMode() {
+  state.mapClickMode = false;
+  document.getElementById('map-click-indicator').classList.remove('active');
+  document.getElementById('map-click-overlay').classList.remove('active');
+  document.getElementById('map-click-cancel').classList.remove('active');
 }
 
 async function handlePhotoSelect(event) {
