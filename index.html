@@ -1048,10 +1048,14 @@ function renderMapMarkers() {
       map: state.gmap,
       title: pt.name,
       visible,
-      label: { text: cat.icon || '📌', fontSize: '20px' },
+      label: { text: cat.icon || '📌', fontSize: '22px', color: '#ffffff' },
       icon: {
-        path: 'M 0,0 m -1,-1',
-        scale: 0,
+        path: google.maps.SymbolPath.CIRCLE,
+        scale: 18,
+        fillColor: cat.color || '#2d6a4f',
+        fillOpacity: 0.85,
+        strokeColor: '#ffffff',
+        strokeWeight: 2,
       },
     });
     marker.addListener('click', () => openDetailModal(pt.id));
@@ -1237,6 +1241,7 @@ async function savePoint() {
     name,
     category_id: categoryId,
     description: document.getElementById('pt-description').value.trim() || null,
+    notes: document.getElementById('pt-notes').value.trim() || null,
     latitude: lat,
     longitude: lng,
     gps_accuracy: accuracy,
@@ -1323,6 +1328,7 @@ function openDetailModal(pointId) {
       ${importanceBadge}
     </div>
     ${pt.description ? `<div class="detail-field"><div class="key">Descrição</div><div class="val">${pt.description}</div></div>` : ''}
+    ${pt.notes ? `<div class="detail-field"><div class="key">Observações</div><div class="val">${pt.notes}</div></div>` : ''}
     <div class="detail-field">
       <div class="key">Coordenadas</div>
       <div class="val" style="font-family:monospace">${pt.latitude?.toFixed(6)}, ${pt.longitude?.toFixed(6)}</div>
@@ -1384,7 +1390,7 @@ function openEditPoint(pointId) {
   document.getElementById('pt-name').value = pt.name;
   document.getElementById('pt-category').value = pt.category_id || '';
   document.getElementById('pt-description').value = pt.description || '';
-  document.getElementById('pt-notes').value = '';
+  document.getElementById('pt-notes').value = pt.notes || '';
   const imp = document.querySelector(`input[name="pt-importance"][value="${pt.importance || 'media'}"]`);
   if (imp) imp.checked = true;
   showCoordPreview(state.tempCoords);
@@ -1598,7 +1604,8 @@ async function saveCat() {
     showToast('✅ Categoria salva!');
   } catch (err) {
     console.error(err);
-    showToast('❌ Erro ao salvar categoria');
+    const msg = err?.message || err?.error_description || JSON.stringify(err);
+    showToast('❌ ' + msg, 6000);
   }
 }
 
