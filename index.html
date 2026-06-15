@@ -1010,9 +1010,22 @@ function initMap() {
 
 function setupRotationGesture(map) {
   const el = document.getElementById('map');
+
+  // iOS Safari: usa gesturechange (pipeline separada dos touch events)
+  let lastHeading = 0;
+  el.addEventListener('gesturestart', () => {
+    lastHeading = map.getHeading() || 0;
+  });
+  el.addEventListener('gesturechange', (e) => {
+    if (Math.abs(e.scale - 1) < 0.15) {
+      map.setHeading(lastHeading + e.rotation);
+    }
+  });
+
+  // Android Chrome: usa touchmove com discriminação por distância
   let startAngle = null;
   let startDist = null;
-  let lastHeading = 0;
+  let touchHeading = 0;
 
   function getAngle(touches) {
     const dx = touches[1].clientX - touches[0].clientX;
@@ -1030,7 +1043,7 @@ function setupRotationGesture(map) {
     if (e.touches.length === 2) {
       startAngle = getAngle(e.touches);
       startDist = getDist(e.touches);
-      lastHeading = map.getHeading() || 0;
+      touchHeading = map.getHeading() || 0;
     }
   }, { passive: true });
 
@@ -1039,7 +1052,7 @@ function setupRotationGesture(map) {
       const distRatio = getDist(e.touches) / startDist;
       if (Math.abs(distRatio - 1) < 0.15) {
         const delta = getAngle(e.touches) - startAngle;
-        map.setHeading(lastHeading + delta);
+        map.setHeading(touchHeading + delta);
       }
     }
   }, { passive: true });
