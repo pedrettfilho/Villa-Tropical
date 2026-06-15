@@ -491,6 +491,7 @@ h2.sec { font-size: 13px; text-transform: uppercase; letter-spacing: .7px; color
     <div id="map-container">
       <div id="map"></div>
       <button id="btn-north" onclick="resetMapHeading()" title="Apontar para o Norte">⊙</button>
+      <div id="dbg" style="position:absolute;top:4px;right:4px;z-index:999;background:rgba(0,0,0,.7);color:#fff;font-size:11px;padding:4px 6px;border-radius:4px;pointer-events:none;line-height:1.6"></div>
       <div id="map-click-overlay" onclick="handleMapOverlayClick(event)"></div>
       <div id="map-click-indicator">📍 Toque no mapa para marcar o ponto</div>
       <button id="map-click-cancel" onclick="cancelMapClickMode()">✕ Cancelar</button>
@@ -1011,18 +1012,24 @@ function initMap() {
 function setupRotationGesture(map) {
   const el = document.getElementById('map');
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !!navigator.maxTouchPoints;
+  const dbg = document.getElementById('dbg');
+  const log = (msg) => { if (dbg) dbg.innerHTML = msg; };
+
+  log('iOS:' + isIOS);
 
   if (isIOS) {
-    // iOS Safari: escuta no window para bypassar interceptação do Google Maps
+    // iOS Safari: fase de captura para bypassar stopPropagation do Google Maps
     let lastHeading = 0;
     window.addEventListener('gesturestart', () => {
       lastHeading = map.getHeading() || 0;
-    });
+      log('iOS:✓ gstart h=' + lastHeading.toFixed(1));
+    }, true);
     window.addEventListener('gesturechange', (e) => {
+      log('iOS:✓ gchange r=' + e.rotation.toFixed(1) + ' s=' + e.scale.toFixed(2));
       if (Math.abs(e.scale - 1) < 0.15) {
         map.setHeading(lastHeading + e.rotation);
       }
-    });
+    }, true);
   } else {
     // Android Chrome: usa touchmove com discriminação por distância
     let startAngle = null;
