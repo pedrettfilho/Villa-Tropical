@@ -1010,57 +1010,60 @@ function initMap() {
 
 function setupRotationGesture(map) {
   const el = document.getElementById('map');
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !!navigator.maxTouchPoints;
 
-  // iOS Safari: usa gesturechange (pipeline separada dos touch events)
-  let lastHeading = 0;
-  el.addEventListener('gesturestart', () => {
-    lastHeading = map.getHeading() || 0;
-  });
-  el.addEventListener('gesturechange', (e) => {
-    if (Math.abs(e.scale - 1) < 0.15) {
-      map.setHeading(lastHeading + e.rotation);
-    }
-  });
-
-  // Android Chrome: usa touchmove com discriminação por distância
-  let startAngle = null;
-  let startDist = null;
-  let touchHeading = 0;
-
-  function getAngle(touches) {
-    const dx = touches[1].clientX - touches[0].clientX;
-    const dy = touches[1].clientY - touches[0].clientY;
-    return Math.atan2(dy, dx) * (180 / Math.PI);
-  }
-
-  function getDist(touches) {
-    const dx = touches[1].clientX - touches[0].clientX;
-    const dy = touches[1].clientY - touches[0].clientY;
-    return Math.hypot(dx, dy);
-  }
-
-  el.addEventListener('touchstart', (e) => {
-    if (e.touches.length === 2) {
-      startAngle = getAngle(e.touches);
-      startDist = getDist(e.touches);
-      touchHeading = map.getHeading() || 0;
-    }
-  }, { passive: true });
-
-  el.addEventListener('touchmove', (e) => {
-    if (e.touches.length === 2 && startAngle !== null) {
-      const distRatio = getDist(e.touches) / startDist;
-      if (Math.abs(distRatio - 1) < 0.15) {
-        const delta = getAngle(e.touches) - startAngle;
-        map.setHeading(touchHeading + delta);
+  if (isIOS) {
+    // iOS Safari: escuta no window para bypassar interceptação do Google Maps
+    let lastHeading = 0;
+    window.addEventListener('gesturestart', () => {
+      lastHeading = map.getHeading() || 0;
+    });
+    window.addEventListener('gesturechange', (e) => {
+      if (Math.abs(e.scale - 1) < 0.15) {
+        map.setHeading(lastHeading + e.rotation);
       }
-    }
-  }, { passive: true });
+    });
+  } else {
+    // Android Chrome: usa touchmove com discriminação por distância
+    let startAngle = null;
+    let startDist = null;
+    let touchHeading = 0;
 
-  el.addEventListener('touchend', () => {
-    startAngle = null;
-    startDist = null;
-  }, { passive: true });
+    function getAngle(touches) {
+      const dx = touches[1].clientX - touches[0].clientX;
+      const dy = touches[1].clientY - touches[0].clientY;
+      return Math.atan2(dy, dx) * (180 / Math.PI);
+    }
+
+    function getDist(touches) {
+      const dx = touches[1].clientX - touches[0].clientX;
+      const dy = touches[1].clientY - touches[0].clientY;
+      return Math.hypot(dx, dy);
+    }
+
+    el.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 2) {
+        startAngle = getAngle(e.touches);
+        startDist = getDist(e.touches);
+        touchHeading = map.getHeading() || 0;
+      }
+    }, { passive: true });
+
+    el.addEventListener('touchmove', (e) => {
+      if (e.touches.length === 2 && startAngle !== null) {
+        const distRatio = getDist(e.touches) / startDist;
+        if (Math.abs(distRatio - 1) < 0.15) {
+          const delta = getAngle(e.touches) - startAngle;
+          map.setHeading(touchHeading + delta);
+        }
+      }
+    }, { passive: true });
+
+    el.addEventListener('touchend', () => {
+      startAngle = null;
+      startDist = null;
+    }, { passive: true });
+  }
 }
 
 function resetMapHeading() {
