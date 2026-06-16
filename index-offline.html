@@ -753,6 +753,7 @@ h2.sec { font-size: 13px; text-transform: uppercase; letter-spacing: .7px; color
       </div>
     </div>
     <div class="modal-footer">
+      <button class="btn btn-danger" id="btn-delete-cat" style="display:none" onclick="confirmDeleteCategory(state.editingCatId)">🗑 Excluir</button>
       <button class="btn btn-secondary" onclick="closeCatModal()">Cancelar</button>
       <button class="btn btn-primary" onclick="saveCat()">💾 Salvar categoria</button>
     </div>
@@ -793,7 +794,7 @@ const CACHE_BBOX = {
   minLng: -41.2671, maxLng: -41.2460,
 };
 const CACHE_ZOOM_MIN = 14;
-const CACHE_ZOOM_MAX = 21;
+const CACHE_ZOOM_MAX = 19;
 
 const CAT_COLORS = ['#2d6a4f','#40916c','#48cae4','#a47148','#e76f51','#9b5de5'];
 const DEFAULT_CATEGORIES = [
@@ -1668,6 +1669,8 @@ async function confirmDeleteCategory(catId) {
   try {
     await deleteCategory(catId);
     await refreshData();
+    document.getElementById('overlay-cat').classList.remove('open');
+    state.editingCatId = null;
     renderAdminCategories();
     renderFilterChips();
     renderMapMarkers();
@@ -1700,6 +1703,7 @@ function openCatModal(catId) {
   document.getElementById('cat-description').value = cat?.description || '';
   state.selectedCatColor = cat?.color || CAT_COLORS[0];
   document.getElementById('cat-active-field').style.display = cat ? '' : 'none';
+  document.getElementById('btn-delete-cat').style.display = cat ? '' : 'none';
   if (cat) document.getElementById('cat-active').checked = cat.active !== false;
   renderColorSwatches();
   document.getElementById('overlay-cat').classList.add('open');

@@ -731,6 +731,7 @@ h2.sec { font-size: 13px; text-transform: uppercase; letter-spacing: .7px; color
       </div>
     </div>
     <div class="modal-footer">
+      <button class="btn btn-danger" id="btn-delete-cat" style="display:none" onclick="confirmDeleteCategory(state.editingCatId)">🗑 Excluir</button>
       <button class="btn btn-secondary" onclick="closeCatModal()">Cancelar</button>
       <button class="btn btn-primary" onclick="saveCat()">💾 Salvar categoria</button>
     </div>
@@ -1677,6 +1678,8 @@ async function confirmDeleteCategory(catId) {
   try {
     await deleteCategory(catId);
     await refreshData();
+    document.getElementById('overlay-cat').classList.remove('open');
+    state.editingCatId = null;
     renderAdminCategories();
     renderFilterChips();
     renderMapMarkers();
@@ -1703,7 +1706,6 @@ function renderAdminCategories() {
       <span class="cat-name">${cat.name}${!cat.active ? ' <em style="font-weight:400;font-size:12px">(inativa)</em>' : ''}</span>
       <span class="cat-dot" style="background:${cat.color}"></span>
       <button class="btn-icon" onclick="openCatModal('${cat.id}')" title="Editar categoria">✏️</button>
-      <button class="btn-icon" onclick="confirmDeleteCategory('${cat.id}')" title="Excluir categoria">🗑</button>
     `;
     list.appendChild(row);
   });
@@ -1718,6 +1720,7 @@ function openCatModal(catId) {
   document.getElementById('cat-description').value = cat?.description || '';
   state.selectedCatColor = cat?.color || CAT_COLORS[0];
   document.getElementById('cat-active-field').style.display = cat ? '' : 'none';
+  document.getElementById('btn-delete-cat').style.display = cat ? '' : 'none';
   if (cat) document.getElementById('cat-active').checked = cat.active !== false;
   renderColorSwatches();
   document.getElementById('overlay-cat').classList.add('open');
