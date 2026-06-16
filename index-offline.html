@@ -178,7 +178,7 @@ main { max-width: 760px; margin: 0 auto; }
 }
 
 .map-fab-group {
-  position: absolute; right: 16px; bottom: 24px;
+  position: absolute; right: 16px; bottom: 90px;
   display: flex; flex-direction: column; gap: 10px;
   z-index: 900;
 }
@@ -302,6 +302,8 @@ main { max-width: 760px; margin: 0 auto; }
   border-radius: 12px; padding: 12px 8px;
   text-align: center; box-shadow: var(--shadow);
 }
+.summary-cat-card { cursor: pointer; transition: box-shadow .15s, transform .15s; }
+.summary-cat-card.on { box-shadow: 0 0 0 2px var(--verde-claro); transform: translateY(-2px); }
 .summary-cat-card .ico { font-size: 24px; display: block; margin-bottom: 4px; }
 .summary-cat-card .count { font-size: 22px; font-weight: 800; color: var(--verde); }
 .summary-cat-card .name { font-size: 10px; color: var(--muted); margin-top: 2px; line-height: 1.2; }
@@ -568,7 +570,7 @@ h2.sec { font-size: 13px; text-transform: uppercase; letter-spacing: .7px; color
     </div>
     <h2 class="sec">Por categoria</h2>
     <div class="summary-grid" id="summary-grid"></div>
-    <h2 class="sec">Últimos adicionados</h2>
+    <h2 class="sec" id="summary-recent-title">Últimos adicionados</h2>
     <div id="summary-recent"></div>
   </div>
 
@@ -816,6 +818,7 @@ const DEFAULT_CATEGORIES = [
    ============================================================ */
 const state = {
   profile: 'visitante',
+  summaryFilterCatId: null,
   points: [],
   categories: [],
   filterCat: 'all',
@@ -888,6 +891,11 @@ async function updateCategory(id, payload) {
   const { data, error } = await db.from('categories').update(payload).eq('id', id).select().single();
   if (error) throw error;
   return data;
+}
+async function deleteCategory(id) {
+  await db.from('points').update({ category_id: null }).eq('category_id', id);
+  const { error } = await db.from('categories').delete().eq('id', id);
+  if (error) throw error;
 }
 
 /* ============================================================
@@ -1222,10 +1230,23 @@ function toggleLayers() {
   panel.classList.toggle('open');
   if (panel.classList.contains('open')) renderLayersPanel();
 }
+function toggleAllLayers(checked) {
+  state.categories.filter(c => c.active).forEach(c => { state.mapLayersVisible[c.id] = checked; });
+  renderMapMarkers();
+  renderLayersPanel();
+}
+
 function renderLayersPanel() {
   const list = document.getElementById('layers-list');
   list.innerHTML = '';
-  state.categories.filter(c => c.active).forEach(cat => {
+  const cats = state.categories.filter(c => c.active);
+  const allVisible = cats.length > 0 && cats.every(c => state.mapLayersVisible[c.id] !== false);
+  const toggleAllRow = document.createElement('div');
+  toggleAllRow.className = 'layer-toggle';
+  toggleAllRow.style.cssText = 'border-bottom:2px solid var(--line);margin-bottom:6px;font-weight:600';
+  toggleAllRow.innerHTML = `<label><input type="checkbox" ${allVisible ? 'checked' : ''} onchange="toggleAllLayers(this.checked)"><span>Marcar todas</span></label>`;
+  list.appendChild(toggleAllRow);
+  cats.forEach(cat => {
     const visible = state.mapLayersVisible[cat.id] !== false;
     const row = document.createElement('div');
     row.className = 'layer-toggle';
@@ -1487,12 +1508,10 @@ function openDetailModal(pointId) {
     editBtn.className = 'btn btn-secondary'; editBtn.innerHTML = '✏️ Editar';
     editBtn.onclick = () => { closeDetailModal(); openEditPoint(pt.id); };
     footer.appendChild(editBtn);
-    if (state.profile === 'admin') {
-      const delBtn = document.createElement('button');
-      delBtn.className = 'btn btn-danger'; delBtn.innerHTML = '🗑 Excluir';
-      delBtn.onclick = () => confirmDeletePoint(pt.id);
-      footer.appendChild(delBtn);
-    }
+    const delBtn = document.createElement('button');
+    delBtn.className = 'btn btn-danger'; delBtn.innerHTML = '🗑 Excluir';
+    delBtn.onclick = () => confirmDeletePoint(pt.id);
+    footer.appendChild(delBtn);
   }
   document.getElementById('overlay-detail').classList.add('open');
 }
@@ -1610,21 +1629,28 @@ function renderSummary() {
     const count = state.points.filter(p => p.category_id === cat.id).length;
     if (count === 0) return;
     const card = document.createElement('div');
-    card.className = 'summary-cat-card';
+    card.className = 'summary-cat-card' + (state.summaryFilterCatId === cat.id ? ' on' : '');
+    card.onclick = () => {
+      state.summaryFilterCatId = state.summaryFilterCatId === cat.id ? null : cat.id;
+      renderSummary();
+    };
     card.innerHTML = `<span class="ico">${cat.icon}</span><div class="count">${count}</div><div class="name">${cat.name}</div>`;
     grid.appendChild(card);
   });
   if (grid.children.length === 0) grid.innerHTML = '<p style="color:var(--muted);font-size:14px;grid-column:1/-1">Cadastre pontos para ver o resumo por categoria.</p>';
+  const recentTitle = document.getElementById('summary-recent-title');
+  const filterCat = state.summaryFilterCatId ? state.categories.find(c => c.id === state.summaryFilterCatId) : null;
+  if (recentTitle) recentTitle.textContent = filterCat ? `Categoria: ${filterCat.name}` : 'Últimos adicionados';
   const recent = document.getElementById('summary-recent');
   recent.innerHTML = '';
-  const recentPts = state.points.slice(0, 5);
-  if (!recentPts.length) { recent.innerHTML = '<p style="color:var(--muted);font-size:14px">Nenhum ponto registrado ainda.</p>'; return; }
-  recentPts.forEach(pt => {
+  const listPts = state.summaryFilterCatId ? state.points.filter(p => p.category_id === state.summaryFilterCatId) : state.points.slice(0, 5);
+  if (!listPts.length) { recent.innerHTML = '<p style="color:var(--muted);font-size:14px">Nenhum ponto registrado ainda.</p>'; return; }
+  listPts.forEach(pt => {
     const cat = state.categories.find(c => c.id === pt.category_id) || {};
     const card = document.createElement('div');
     card.className = 'point-card'; card.style.borderLeftColor = cat.color || '#6b7280';
     card.onclick = () => openDetailModal(pt.id);
-    card.innerHTML = `<div class="point-card-icon">${cat.icon || '📌'}</div><div class="point-card-info"><div class="point-card-name">${pt.name}</div><div class="point-card-meta">${cat.name || ''} · ${formatDate(pt.created_at).split(',')[0]}</div></div>`;
+    card.innerHTML = `<div class="point-card-icon">${cat.icon || '📌'}</div><div class="point-card-info"><div class="point-card-name">${pt.name}</div><div class="point-card-meta">${cat.name || 'Sem categoria'} · ${formatDate(pt.created_at).split(',')[0]}</div></div>`;
     recent.appendChild(card);
   });
 }
@@ -1632,6 +1658,27 @@ function renderSummary() {
 /* ============================================================
    CATEGORIES — admin
    ============================================================ */
+async function confirmDeleteCategory(catId) {
+  const cat = state.categories.find(c => c.id === catId);
+  const count = state.points.filter(p => p.category_id === catId).length;
+  const msg = count > 0
+    ? `Excluir a categoria "${cat?.name}"? ${count} ponto(s) ficarão sem categoria.`
+    : `Excluir a categoria "${cat?.name}"?`;
+  if (!confirm(msg)) return;
+  try {
+    await deleteCategory(catId);
+    await refreshData();
+    renderAdminCategories();
+    renderFilterChips();
+    renderMapMarkers();
+    if (document.getElementById('view-summary').classList.contains('on')) renderSummary();
+    showToast('🗑 Categoria excluída');
+  } catch (err) {
+    console.error(err);
+    showToast('❌ Erro ao excluir categoria');
+  }
+}
+
 function renderAdminCategories() {
   const list = document.getElementById('categories-admin-list');
   list.innerHTML = '';
@@ -1639,7 +1686,7 @@ function renderAdminCategories() {
   state.categories.forEach(cat => {
     const row = document.createElement('div');
     row.className = `category-row${cat.active ? '' : ' cat-inactive'}`;
-    row.innerHTML = `<span class="cat-icon">${cat.icon}</span><span class="cat-name">${cat.name}${!cat.active ? ' <em style="font-weight:400;font-size:12px">(inativa)</em>' : ''}</span><span class="cat-dot" style="background:${cat.color}"></span><button class="btn-icon" onclick="openCatModal('${cat.id}')" title="Editar categoria">✏️</button>`;
+    row.innerHTML = `<span class="cat-icon">${cat.icon}</span><span class="cat-name">${cat.name}${!cat.active ? ' <em style="font-weight:400;font-size:12px">(inativa)</em>' : ''}</span><span class="cat-dot" style="background:${cat.color}"></span><button class="btn-icon" onclick="openCatModal('${cat.id}')" title="Editar categoria">✏️</button><button class="btn-icon" onclick="confirmDeleteCategory('${cat.id}')" title="Excluir categoria">🗑</button>`;
     list.appendChild(row);
   });
 }
