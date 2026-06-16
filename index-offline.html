@@ -794,7 +794,7 @@ const CACHE_BBOX = {
   minLng: -41.2671, maxLng: -41.2460,
 };
 const CACHE_ZOOM_MIN = 14;
-const CACHE_ZOOM_MAX = 19;
+const CACHE_ZOOM_MAX = 18;
 
 const CAT_COLORS = ['#2d6a4f','#40916c','#48cae4','#a47148','#e76f51','#9b5de5'];
 const DEFAULT_CATEGORIES = [
@@ -1049,7 +1049,7 @@ function initMap() {
 
   L.tileLayer(
     'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    { maxZoom: 19, maxNativeZoom: 19, tileSize: 256, attribution: '© Esri — Satellite imagery' }
+    { maxZoom: 22, maxNativeZoom: 18, tileSize: 256, attribution: '© Esri — Satellite imagery' }
   ).addTo(map);
 
   L.control.zoom({ position: 'topleft' }).addTo(map);
