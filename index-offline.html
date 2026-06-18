@@ -518,6 +518,21 @@ h2.sec { font-size: 13px; text-transform: uppercase; letter-spacing: .7px; color
 #loading h1 { font-size: 28px; font-weight: 800; }
 #loading p { font-size: 14px; opacity: .7; }
 #loading.hidden { display: none; }
+
+/* ---------- Puxar pra atualizar ---------- */
+html, body { overscroll-behavior-y: contain; }
+#ptr-indicator {
+  position: fixed; top: 8px; left: 50%; z-index: 80;
+  width: 38px; height: 38px; border-radius: 50%;
+  background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,.22);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 19px; color: var(--verde);
+  transform: translate(-50%, -60px); opacity: 0;
+  transition: transform .2s ease, opacity .2s ease; pointer-events: none;
+}
+#ptr-indicator.ready { color: var(--verde-claro); }
+#ptr-indicator.refreshing .ico { animation: ptr-spin .8s linear infinite; }
+@keyframes ptr-spin { to { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
@@ -527,6 +542,9 @@ h2.sec { font-size: 13px; text-transform: uppercase; letter-spacing: .7px; color
   <h1>Villa Tropical</h1>
   <p>Carregando...</p>
 </div>
+
+<!-- Puxar pra atualizar -->
+<div id="ptr-indicator"><span class="ico">↻</span></div>
 
 <header>
   <div class="brand-icon">🌿</div>
@@ -1949,6 +1967,90 @@ function showToast(msg, duration = 3000) {
   clearTimeout(t._timer);
   t._timer = setTimeout(() => t.classList.remove('show'), duration);
 }
+
+function hhmm(d) {
+  return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
+/* ============================================================
+   PUXAR PRA ATUALIZAR (pull-to-refresh)
+   ============================================================ */
+async function doPullRefresh() {
+  if (state.ptrBusy) return;
+  state.ptrBusy = true;
+  try {
+    if (navigator.onLine) await syncOfflineQueue();
+    await refreshData();
+    renderMapMarkers();
+    renderTrailsAreas();
+    const v = document.querySelector('.view.on');
+    if (v && v.id === 'view-points')       { renderFilterChips(); renderPointsList(); }
+    else if (v && v.id === 'view-trails')  renderTrailsList();
+    else if (v && v.id === 'view-summary') renderSummary();
+    else if (v && v.id === 'view-admin')   renderAdminCategories();
+    updateStatusBar();
+    state.lastSync = new Date();
+    showToast(navigator.onLine
+      ? '✅ Atualizado às ' + hhmm(state.lastSync)
+      : '📵 Sem internet — mostrando dados salvos no aparelho');
+  } catch (err) {
+    console.error('Falha ao atualizar:', err);
+    showToast('❌ Não foi possível atualizar agora');
+  } finally {
+    state.ptrBusy = false;
+  }
+}
+
+(function setupPullToRefresh() {
+  const THRESHOLD = 65;
+  let startY = null, pulling = false, ready = false;
+  const ind = () => document.getElementById('ptr-indicator');
+  function canPull() {
+    const v = document.querySelector('.view.on');
+    return v && v.id !== 'view-map' && window.scrollY <= 0;
+  }
+  function reset() {
+    pulling = false; startY = null; ready = false;
+    const el = ind(); if (!el) return;
+    el.style.transition = '';
+    el.style.transform = ''; el.style.opacity = '';
+    el.classList.remove('ready');
+  }
+  document.addEventListener('touchstart', e => {
+    if (state.ptrBusy || e.touches.length !== 1 || !canPull()) { pulling = false; return; }
+    startY = e.touches[0].clientY; pulling = true; ready = false;
+  }, { passive: true });
+  document.addEventListener('touchmove', e => {
+    if (!pulling || startY == null) return;
+    const dy = e.touches[0].clientY - startY;
+    if (dy <= 0 || window.scrollY > 0) { reset(); return; }
+    const el = ind(); if (!el) return;
+    const pull = Math.min(dy * 0.5, 80);
+    el.style.transition = 'none';
+    el.style.transform = `translate(-50%, ${pull - 14}px)`;
+    el.style.opacity = String(Math.min(pull / THRESHOLD, 1));
+    ready = dy >= THRESHOLD;
+    el.classList.toggle('ready', ready);
+  }, { passive: true });
+  document.addEventListener('touchend', () => {
+    if (!pulling) return;
+    const el = ind();
+    if (ready && el) {
+      el.style.transition = 'transform .2s ease, opacity .2s ease';
+      el.style.transform = 'translate(-50%, 50px)';
+      el.style.opacity = '1';
+      el.classList.add('refreshing');
+      doPullRefresh().finally(() => {
+        el.classList.remove('refreshing', 'ready');
+        el.style.transform = ''; el.style.opacity = '';
+      });
+    } else {
+      reset();
+    }
+    pulling = false; startY = null; ready = false;
+  }, { passive: true });
+  document.addEventListener('touchcancel', reset, { passive: true });
+})();
 
 async function compressImage(file, maxPx = 1200, quality = 0.8) {
   return new Promise((resolve) => {
