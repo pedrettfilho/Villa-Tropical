@@ -182,6 +182,44 @@ main { max-width: 760px; margin: 0 auto; }
   display: flex; flex-direction: column; gap: 10px;
   z-index: 900;
 }
+.record-menu {
+  position: absolute; right: 16px; bottom: 150px; z-index: 950;
+  background: #fff; border-radius: 12px; box-shadow: var(--shadow);
+  display: none; flex-direction: column; overflow: hidden;
+}
+.record-menu.open { display: flex; }
+.record-menu button {
+  border: none; background: #fff; padding: 13px 18px; font: inherit;
+  font-size: 14px; font-weight: 600; text-align: left; cursor: pointer;
+  white-space: nowrap; border-bottom: 1px solid var(--line);
+}
+.record-menu button:last-child { border-bottom: none; }
+.record-menu button:active { background: var(--papel); }
+#record-banner {
+  position: absolute; top: 28px; left: 50%; transform: translateX(-50%);
+  background: var(--risk); color: #fff; padding: 8px 16px; border-radius: 20px;
+  font-size: 12px; font-weight: 700; z-index: 950; display: none;
+  box-shadow: 0 2px 8px rgba(0,0,0,.2); text-align: center; max-width: 92%;
+}
+#record-banner.active { display: block; }
+#record-stats {
+  position: absolute; top: 66px; left: 50%; transform: translateX(-50%);
+  background: rgba(0,0,0,.7); color: #fff; padding: 5px 14px; border-radius: 16px;
+  font-size: 13px; font-weight: 600; z-index: 950; display: none; white-space: nowrap;
+}
+#record-stats.active { display: block; }
+#record-controls {
+  position: absolute; bottom: 90px; left: 50%; transform: translateX(-50%);
+  display: none; gap: 8px; z-index: 950;
+}
+#record-controls.active { display: flex; }
+#record-controls button {
+  border: none; border-radius: 20px; padding: 11px 16px; font: inherit;
+  font-size: 14px; font-weight: 700; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.25);
+  background: #fff; color: var(--ink); white-space: nowrap;
+}
+#record-controls button.primary { background: var(--verde-claro); color: #fff; }
+#record-controls button.danger { background: var(--risk); color: #fff; }
 .map-fab {
   width: 50px; height: 50px; border-radius: 50%;
   background: var(--verde); color: #fff;
@@ -508,7 +546,7 @@ h2.sec { font-size: 13px; text-transform: uppercase; letter-spacing: .7px; color
   <button onclick="goTo('points')" id="nav-points">
     <span class="ico">📍</span>Pontos
   </button>
-  <button id="nav-trails" disabled>
+  <button onclick="goTo('trails')" id="nav-trails">
     <span class="ico">🧭</span>Trilhas
   </button>
   <button onclick="goTo('summary')" id="nav-summary">
@@ -538,9 +576,17 @@ h2.sec { font-size: 13px; text-transform: uppercase; letter-spacing: .7px; color
       </div>
       <div class="map-fab-group">
         <button class="map-fab primary" onclick="openNewPoint()" title="Novo ponto">+</button>
+        <button class="map-fab secondary" onclick="toggleRecordMenu()" title="Trilhas e áreas">🧭</button>
         <button class="map-fab secondary" onclick="centerOnUser()" title="Minha localização">⌖</button>
         <button class="map-fab secondary" onclick="toggleLayers()" title="Camadas">≡</button>
       </div>
+      <div id="record-menu" class="record-menu">
+        <button onclick="startTrailRecording()">🧭 Iniciar trilha</button>
+        <button onclick="startAreaMarking()">⬡ Nova área</button>
+      </div>
+      <div id="record-banner"></div>
+      <div id="record-stats"></div>
+      <div id="record-controls"></div>
     </div>
   </div>
 
@@ -556,11 +602,11 @@ h2.sec { font-size: 13px; text-transform: uppercase; letter-spacing: .7px; color
   </div>
 
   <div class="view" id="view-trails">
-    <div class="coming-soon" style="margin-top:32px">
-      <span class="ico">🧭</span>
-      <h2>Trilhas</h2>
-      <p>A gravação de trilhas por GPS<br>estará disponível em breve.</p>
+    <div class="mode-tabs" style="margin:16px 16px 0">
+      <button class="mode-tab on" data-ftype="trail" onclick="setTrailsTab('trail', this)">🧭 Trilhas</button>
+      <button class="mode-tab" data-ftype="area" onclick="setTrailsTab('area', this)">⬡ Áreas</button>
     </div>
+    <div id="trails-list" style="padding:16px"></div>
   </div>
 
   <div class="view" id="view-summary">
@@ -760,6 +806,40 @@ h2.sec { font-size: 13px; text-transform: uppercase; letter-spacing: .7px; color
   </div>
 </div>
 
+<!-- Modal: Detalhe de trilha/área -->
+<div class="overlay" id="overlay-feature" onclick="closeFeatureDetail(event)">
+  <div class="modal" id="modal-feature">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <h2 id="feature-name">-</h2>
+      <button class="modal-close" onclick="closeFeatureDetail()">✕</button>
+    </div>
+    <div class="modal-body"><div id="feature-fields"></div></div>
+    <div class="modal-footer" id="feature-footer"></div>
+  </div>
+</div>
+
+<!-- Modal: Salvar/editar trilha ou área -->
+<div class="overlay" id="overlay-save-feature" onclick="closeSaveFeature(event)">
+  <div class="modal" id="modal-save-feature">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <h2 id="save-feature-title">Salvar</h2>
+      <button class="modal-close" onclick="closeSaveFeature()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="save-feature-measure" style="font-size:14px;color:var(--muted);margin-bottom:14px;text-align:center"></div>
+      <div class="field"><label>Nome *</label><input type="text" id="sf-name" placeholder="Ex: Trilha da nascente"></div>
+      <div class="field"><label>Categoria</label><select id="sf-category"><option value="">— Selecione —</option></select></div>
+      <div class="field"><label>Notas</label><textarea id="sf-notes" placeholder="Observações..."></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeSaveFeature()">Cancelar</button>
+      <button class="btn btn-primary" id="btn-save-feature" onclick="commitSaveFeature()">💾 Salvar</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script>
@@ -839,6 +919,21 @@ const state = {
   userLocationAccuracy: null,
   isOnline: navigator.onLine,
   isSyncing: false,
+  // Trilhas e áreas
+  trails: [],
+  areas: [],
+  trailsVisible: true,
+  areasVisible: true,
+  trailsTab: 'trail',
+  mapTrailLines: [],       // [{ id, line }]
+  mapAreaPolygons: [],     // [{ id, polygon }]
+  recording: null,         // { type:'trail'|'area', path:[] }
+  recordWatch: null,
+  recordLine: null,        // L.polyline / L.polygon ao vivo
+  recordVertexMarkers: [],
+  recordPaused: false,
+  editingFeature: null,    // { type, id }
+  _pendingFeature: null,
 };
 
 /* ============================================================
@@ -899,6 +994,45 @@ async function deleteCategory(id) {
   if (error) throw error;
 }
 
+async function fetchTrails() {
+  const { data, error } = await db.from('trails')
+    .select('*, categories(name, icon, color)')
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+async function fetchAreas() {
+  const { data, error } = await db.from('areas')
+    .select('*, categories(name, icon, color)')
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+async function insertTrail(payload) {
+  const { data, error } = await db.from('trails').insert(payload).select().single();
+  if (error) throw error; return data;
+}
+async function updateTrail(id, payload) {
+  const { data, error } = await db.from('trails').update(payload).eq('id', id).select().single();
+  if (error) throw error; return data;
+}
+async function deleteTrail(id) {
+  const { error } = await db.from('trails').delete().eq('id', id);
+  if (error) throw error;
+}
+async function insertArea(payload) {
+  const { data, error } = await db.from('areas').insert(payload).select().single();
+  if (error) throw error; return data;
+}
+async function updateArea(id, payload) {
+  const { data, error } = await db.from('areas').update(payload).eq('id', id).select().single();
+  if (error) throw error; return data;
+}
+async function deleteArea(id) {
+  const { error } = await db.from('areas').delete().eq('id', id);
+  if (error) throw error;
+}
+
 /* ============================================================
    LOCAL STORAGE
    ============================================================ */
@@ -915,6 +1049,15 @@ function addToOfflineQueue(point) {
 function removeFromOfflineQueue(localId) {
   lsSet('vt_offline_queue', getOfflineQueue().filter(p => p._localId !== localId));
 }
+function getTrailQueue() { return lsGet('vt_offline_queue_trails', []); }
+function addToTrailQueue(x) { const q = getTrailQueue(); q.push(x); lsSet('vt_offline_queue_trails', q); }
+function removeFromTrailQueue(localId) { lsSet('vt_offline_queue_trails', getTrailQueue().filter(t => t._localId !== localId)); }
+function getAreaQueue() { return lsGet('vt_offline_queue_areas', []); }
+function addToAreaQueue(x) { const q = getAreaQueue(); q.push(x); lsSet('vt_offline_queue_areas', q); }
+function removeFromAreaQueue(localId) { lsSet('vt_offline_queue_areas', getAreaQueue().filter(a => a._localId !== localId)); }
+function totalPendingCount() {
+  return getOfflineQueue().length + getTrailQueue().length + getAreaQueue().length;
+}
 
 /* ============================================================
    REFRESH DATA
@@ -922,23 +1065,34 @@ function removeFromOfflineQueue(localId) {
 async function refreshData() {
   if (navigator.onLine) {
     try {
-      [state.categories, state.points] = await Promise.all([fetchCategories(), fetchPoints()]);
+      [state.categories, state.points, state.trails, state.areas] = await Promise.all([
+        fetchCategories(), fetchPoints(), fetchTrails(), fetchAreas(),
+      ]);
       lsSet('vt_categories', state.categories);
       lsSet('vt_points', state.points);
+      lsSet('vt_trails', state.trails);
+      lsSet('vt_areas', state.areas);
       lsSet('vt_last_sync', new Date().toISOString());
     } catch {
       state.categories = lsGet('vt_categories', []);
       state.points     = lsGet('vt_points', []);
+      state.trails     = lsGet('vt_trails', []);
+      state.areas      = lsGet('vt_areas', []);
     }
   } else {
     state.categories = lsGet('vt_categories', []);
     state.points     = lsGet('vt_points', []);
+    state.trails     = lsGet('vt_trails', []);
+    state.areas      = lsGet('vt_areas', []);
   }
-  const queue = getOfflineQueue();
-  queue.forEach(qp => {
-    if (!state.points.find(p => p.id === qp.id)) {
-      state.points.unshift({ ...qp, _offline: true });
-    }
+  getOfflineQueue().forEach(qp => {
+    if (!state.points.find(p => p.id === qp.id)) state.points.unshift({ ...qp, _offline: true });
+  });
+  getTrailQueue().forEach(qt => {
+    if (!state.trails.find(t => t.id === qt.id)) state.trails.unshift({ ...qt, _offline: true });
+  });
+  getAreaQueue().forEach(qa => {
+    if (!state.areas.find(a => a.id === qa.id)) state.areas.unshift({ ...qa, _offline: true });
   });
 }
 
@@ -948,38 +1102,55 @@ async function refreshData() {
 function updateStatusBar() {
   const bar = document.getElementById('status-bar');
   if (!bar) return;
-  const queue = getOfflineQueue();
+  const pending = totalPendingCount();
   if (state.isSyncing) {
     bar.className = 'syncing'; bar.textContent = '⏳ Sincronizando...';
   } else if (state.isOnline) {
     bar.className = 'online';
-    bar.textContent = queue.length ? `🟢 Online — ${queue.length} ponto(s) pendente(s)` : '🟢 Online';
+    bar.textContent = pending ? `🟢 Online — ${pending} pendente(s)` : '🟢 Online';
   } else {
     bar.className = 'offline';
-    bar.textContent = queue.length ? `🔴 Offline — ${queue.length} ponto(s) pendente(s)` : '🔴 Offline';
+    bar.textContent = pending ? `🔴 Offline — ${pending} pendente(s)` : '🔴 Offline';
   }
 }
 
 async function syncOfflineQueue() {
-  const queue = getOfflineQueue();
-  if (!queue.length || !navigator.onLine || state.isSyncing) return;
+  if (!navigator.onLine || state.isSyncing) return;
+  if (totalPendingCount() === 0) return;
   state.isSyncing = true;
   updateStatusBar();
   let synced = 0;
-  for (const point of queue) {
+
+  for (const point of getOfflineQueue()) {
     try {
       const { _localId, _offline, categories, point_photos, ...payload } = point;
       await insertPoint(payload);
-      removeFromOfflineQueue(_localId);
-      synced++;
-    } catch (err) { console.warn('Sync falhou para ponto:', err); }
+      removeFromOfflineQueue(_localId); synced++;
+    } catch (err) { console.warn('Sync ponto falhou:', err); }
   }
+  for (const trail of getTrailQueue()) {
+    try {
+      const { _localId, _offline, categories, ...payload } = trail;
+      await insertTrail(payload);
+      removeFromTrailQueue(_localId); synced++;
+    } catch (err) { console.warn('Sync trilha falhou:', err); }
+  }
+  for (const area of getAreaQueue()) {
+    try {
+      const { _localId, _offline, categories, ...payload } = area;
+      await insertArea(payload);
+      removeFromAreaQueue(_localId); synced++;
+    } catch (err) { console.warn('Sync área falhou:', err); }
+  }
+
   state.isSyncing = false;
   if (synced > 0) {
     await refreshData();
     renderMapMarkers();
-    renderPointsList();
-    showToast(`✅ ${synced} ponto(s) sincronizado(s)`);
+    renderTrailsAreas();
+    if (document.getElementById('view-points').classList.contains('on')) renderPointsList();
+    if (document.getElementById('view-trails').classList.contains('on')) renderTrailsList();
+    showToast(`✅ ${synced} item(ns) sincronizado(s)`);
   }
   updateStatusBar();
 }
@@ -1092,6 +1263,465 @@ function renderMapMarkers() {
   });
 }
 
+/* ============================================================
+   TRILHAS E ÁREAS — render no mapa (Leaflet)
+   ============================================================ */
+function clearTrailsAreasFromMap() {
+  state.mapTrailLines.forEach(t => t.line.remove());
+  state.mapAreaPolygons.forEach(a => a.polygon.remove());
+  state.mapTrailLines = [];
+  state.mapAreaPolygons = [];
+}
+
+function renderTrailsAreas() {
+  if (!state.lmap) return;
+  clearTrailsAreasFromMap();
+
+  state.areas.forEach(a => {
+    const path = a.path || [];
+    if (path.length < 3) return;
+    if (!state.areasVisible) return;
+    const color = a.categories?.color || '#40916c';
+    const polygon = L.polygon(path.map(p => [p.lat, p.lng]), {
+      color, weight: 2.5, opacity: a._offline ? 0.5 : 0.9,
+      fillColor: color, fillOpacity: a._offline ? 0.15 : 0.28,
+      dashArray: a._offline ? '6 4' : null,
+    }).addTo(state.lmap).on('click', () => openFeatureDetail('area', a.id));
+    state.mapAreaPolygons.push({ id: a.id, polygon });
+  });
+
+  state.trails.forEach(t => {
+    const path = t.path || [];
+    if (path.length < 2) return;
+    if (!state.trailsVisible) return;
+    const color = t.categories?.color || '#2d6a4f';
+    const line = L.polyline(path.map(p => [p.lat, p.lng]), {
+      color, weight: 4, opacity: t._offline ? 0.5 : 0.95,
+      dashArray: t._offline ? '6 6' : null,
+    }).addTo(state.lmap).on('click', () => openFeatureDetail('trail', t.id));
+    state.mapTrailLines.push({ id: t.id, line });
+  });
+}
+
+/* ============================================================
+   TRILHAS E ÁREAS — detalhe
+   ============================================================ */
+function getFeature(type, id) {
+  return (type === 'trail' ? state.trails : state.areas).find(f => f.id === id);
+}
+
+function openFeatureDetail(type, id) {
+  const f = getFeature(type, id);
+  if (!f) return;
+  const cat = f.categories || {};
+  const icon = type === 'trail' ? '🧭' : '⬡';
+  document.getElementById('feature-name').textContent = `${icon} ${f.name}`;
+
+  const measure = type === 'trail'
+    ? `<div class="detail-field"><div class="key">Distância</div><div class="val">${formatDistance(f.distance_m)}</div></div>`
+    : `<div class="detail-field"><div class="key">Área</div><div class="val">${formatArea(f.area_m2)}</div></div>
+       <div class="detail-field"><div class="key">Perímetro</div><div class="val">${formatDistance(f.perimeter_m)}</div></div>`;
+  const offlineBadge = f._offline ? '<span class="badge pending">⏳ Pendente sync</span>' : '';
+
+  document.getElementById('feature-fields').innerHTML = `
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+      <span class="badge ok">${cat.name || 'Sem categoria'}</span>${offlineBadge}
+    </div>
+    ${measure}
+    ${f.notes ? `<div class="detail-field"><div class="key">Notas</div><div class="val">${f.notes}</div></div>` : ''}
+    <div class="detail-field"><div class="key">Pontos</div><div class="val">${(f.path||[]).length}</div></div>
+    <div class="detail-field"><div class="key">Registrado em</div><div class="val">${formatDate(f.created_at)}</div></div>
+  `;
+
+  const footer = document.getElementById('feature-footer');
+  footer.innerHTML = '';
+  const focusBtn = document.createElement('button');
+  focusBtn.className = 'btn btn-secondary';
+  focusBtn.innerHTML = '🗺️ Ver no mapa';
+  focusBtn.onclick = () => { closeFeatureDetail(); focusFeatureOnMap(type, id); };
+  footer.appendChild(focusBtn);
+
+  if (!f._offline) {
+    const editBtn = document.createElement('button');
+    editBtn.className = 'btn btn-secondary';
+    editBtn.innerHTML = '✏️ Editar';
+    editBtn.onclick = () => { closeFeatureDetail(); openEditFeature(type, id); };
+    footer.appendChild(editBtn);
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'btn btn-danger';
+    delBtn.innerHTML = '🗑 Excluir';
+    delBtn.onclick = () => confirmDeleteFeature(type, id);
+    footer.appendChild(delBtn);
+  }
+  document.getElementById('overlay-feature').classList.add('open');
+}
+
+function closeFeatureDetail(event) {
+  if (event && event.target !== document.getElementById('overlay-feature')) return;
+  document.getElementById('overlay-feature').classList.remove('open');
+}
+
+function focusFeatureOnMap(type, id) {
+  const f = getFeature(type, id);
+  if (!f || !state.lmap || !(f.path||[]).length) return;
+  goTo('map');
+  setTimeout(() => {
+    state.lmap.invalidateSize();
+    state.lmap.fitBounds(L.latLngBounds(f.path.map(p => [p.lat, p.lng])));
+  }, 200);
+}
+
+async function confirmDeleteFeature(type, id) {
+  const label = type === 'trail' ? 'trilha' : 'área';
+  if (!confirm(`Excluir esta ${label} permanentemente?`)) return;
+  try {
+    if (type === 'trail') await deleteTrail(id); else await deleteArea(id);
+    await refreshData();
+    document.getElementById('overlay-feature').classList.remove('open');
+    renderTrailsAreas();
+    if (document.getElementById('view-trails').classList.contains('on')) renderTrailsList();
+    showToast(`🗑 ${type === 'trail' ? 'Trilha' : 'Área'} excluída`);
+  } catch (err) { console.error(err); showToast('❌ Erro ao excluir'); }
+}
+
+/* ============================================================
+   TRILHAS E ÁREAS — lista (aba Trilhas)
+   ============================================================ */
+function setTrailsTab(type, btn) {
+  state.trailsTab = type;
+  document.querySelectorAll('#view-trails .mode-tab').forEach(t => t.classList.remove('on'));
+  if (btn) btn.classList.add('on');
+  renderTrailsList();
+}
+
+function renderTrailsList() {
+  const list = document.getElementById('trails-list');
+  const type = state.trailsTab;
+  const items = type === 'trail' ? state.trails : state.areas;
+  if (!items.length) {
+    list.innerHTML = `<div class="empty-state">
+      <span class="ico">${type === 'trail' ? '🧭' : '⬡'}</span>
+      <p>Nenhuma ${type === 'trail' ? 'trilha gravada' : 'área marcada'} ainda.<br>
+      Use o botão ${type === 'trail' ? '🧭' : '⬡'} no mapa para começar.</p>
+    </div>`;
+    return;
+  }
+  list.innerHTML = '';
+  items.forEach(f => {
+    const cat = f.categories || {};
+    const color = cat.color || '#6b7280';
+    const measure = type === 'trail' ? formatDistance(f.distance_m) : formatArea(f.area_m2);
+    const card = document.createElement('div');
+    card.className = 'point-card';
+    card.style.borderLeftColor = color;
+    card.onclick = () => openFeatureDetail(type, f.id);
+    card.innerHTML = `
+      <div class="point-card-icon">${type === 'trail' ? '🧭' : '⬡'}</div>
+      <div class="point-card-info">
+        <div class="point-card-name">${f.name}</div>
+        <div class="point-card-meta">${cat.name || 'Sem categoria'} · ${measure} · ${formatDate(f.created_at).split(',')[0]}</div>
+        ${f._offline ? '<div style="margin-top:4px"><span class="badge pending">⏳ Offline</span></div>' : ''}
+      </div>
+      <span class="cat-dot" style="background:${color};width:14px;height:14px"></span>
+    `;
+    list.appendChild(card);
+  });
+}
+
+/* ============================================================
+   TRILHAS E ÁREAS — salvar / editar
+   ============================================================ */
+function openSaveFeature(pending) {
+  state.editingFeature = null;
+  state._pendingFeature = pending;
+  const isTrail = pending.type === 'trail';
+  document.getElementById('save-feature-title').textContent = isTrail ? '🧭 Salvar trilha' : '⬡ Salvar área';
+  document.getElementById('save-feature-measure').textContent = isTrail
+    ? `Distância: ${formatDistance(pending.distance_m)} · ${pending.path.length} pontos`
+    : `Área: ${formatArea(pending.area_m2)} · Perímetro: ${formatDistance(pending.perimeter_m)} · ${pending.path.length} vértices`;
+  document.getElementById('sf-name').value = '';
+  document.getElementById('sf-notes').value = '';
+  populateFeatureCategorySelect('');
+  document.getElementById('overlay-save-feature').classList.add('open');
+}
+
+function openEditFeature(type, id) {
+  const f = getFeature(type, id);
+  if (!f) return;
+  state.editingFeature = { type, id };
+  state._pendingFeature = null;
+  const isTrail = type === 'trail';
+  document.getElementById('save-feature-title').textContent = isTrail ? '✏️ Editar trilha' : '✏️ Editar área';
+  document.getElementById('save-feature-measure').textContent = isTrail
+    ? `Distância: ${formatDistance(f.distance_m)} · ${(f.path||[]).length} pontos`
+    : `Área: ${formatArea(f.area_m2)} · Perímetro: ${formatDistance(f.perimeter_m)}`;
+  document.getElementById('sf-name').value = f.name || '';
+  document.getElementById('sf-notes').value = f.notes || '';
+  populateFeatureCategorySelect(f.category_id || '');
+  document.getElementById('overlay-save-feature').classList.add('open');
+}
+
+function populateFeatureCategorySelect(selectedId) {
+  const sel = document.getElementById('sf-category');
+  sel.innerHTML = '<option value="">— Sem categoria —</option>';
+  state.categories.filter(c => c.active).forEach(cat => {
+    const opt = document.createElement('option');
+    opt.value = cat.id; opt.textContent = `${cat.icon} ${cat.name}`;
+    if (cat.id === selectedId) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+
+function closeSaveFeature(event) {
+  if (event && event.target !== document.getElementById('overlay-save-feature')) return;
+  document.getElementById('overlay-save-feature').classList.remove('open');
+}
+
+async function commitSaveFeature() {
+  const name = document.getElementById('sf-name').value.trim();
+  if (!name) { showToast('⚠️ Informe o nome'); return; }
+  const category_id = document.getElementById('sf-category').value || null;
+  const notes = document.getElementById('sf-notes').value.trim() || null;
+  const btn = document.getElementById('btn-save-feature');
+  btn.disabled = true; btn.textContent = '⏳ Salvando...';
+  const now = new Date();
+  try {
+    if (state.editingFeature) {
+      const { type, id } = state.editingFeature;
+      const payload = { name, category_id, notes, updated_at: now.toISOString() };
+      if (type === 'trail') await updateTrail(id, payload); else await updateArea(id, payload);
+    } else {
+      const p = state._pendingFeature;
+      const base = p.type === 'trail'
+        ? { name, category_id, notes, path: p.path, distance_m: p.distance_m, updated_at: now.toISOString() }
+        : { name, category_id, notes, path: p.path, area_m2: p.area_m2, perimeter_m: p.perimeter_m, updated_at: now.toISOString() };
+
+      if (!navigator.onLine) {
+        const local = { ...base, id: crypto.randomUUID(), _localId: crypto.randomUUID(),
+          created_at: now.toISOString(),
+          categories: state.categories.find(c => c.id === category_id) || {} };
+        if (p.type === 'trail') { addToTrailQueue(local); state.trails.unshift({ ...local, _offline: true }); lsSet('vt_trails', state.trails.filter(t => !t._offline)); }
+        else { addToAreaQueue(local); state.areas.unshift({ ...local, _offline: true }); lsSet('vt_areas', state.areas.filter(a => !a._offline)); }
+        document.getElementById('overlay-save-feature').classList.remove('open');
+        state.editingFeature = null; state._pendingFeature = null;
+        updateStatusBar(); renderTrailsAreas();
+        if (document.getElementById('view-trails').classList.contains('on')) renderTrailsList();
+        showToast('📥 Salvo offline — sincronizará ao voltar online');
+        btn.disabled = false; btn.textContent = '💾 Salvar';
+        return;
+      }
+      if (p.type === 'trail') await insertTrail(base); else await insertArea(base);
+    }
+    await refreshData();
+    document.getElementById('overlay-save-feature').classList.remove('open');
+    state.editingFeature = null; state._pendingFeature = null;
+    renderTrailsAreas();
+    if (document.getElementById('view-trails').classList.contains('on')) renderTrailsList();
+    showToast('✅ Salvo com sucesso!');
+  } catch (err) {
+    console.error('commitSaveFeature:', err);
+    const msg = err?.message || err?.error_description || err?.hint || err?.details || JSON.stringify(err);
+    showToast('❌ ' + msg, 8000);
+  } finally {
+    btn.disabled = false; btn.textContent = '💾 Salvar';
+  }
+}
+
+/* ============================================================
+   GRAVAÇÃO — menu e controles compartilhados
+   ============================================================ */
+const DRAFT_KEY = 'vt_trail_draft';
+const TRAIL_MIN_MOVE_M = 5;
+const TRAIL_MAX_ACCURACY_M = 50;
+
+function toggleRecordMenu() {
+  if (state.recording) { showToast('Já existe uma gravação em andamento'); return; }
+  document.getElementById('record-menu').classList.toggle('open');
+}
+function closeRecordMenu() { document.getElementById('record-menu').classList.remove('open'); }
+
+function showRecordUI({ banner, stats }) {
+  const b = document.getElementById('record-banner');
+  const s = document.getElementById('record-stats');
+  b.textContent = banner; b.classList.add('active');
+  s.textContent = stats; s.classList.add('active');
+  document.getElementById('record-controls').classList.add('active');
+}
+function updateRecordStats(text) { document.getElementById('record-stats').textContent = text; }
+function setRecordControls(html) { document.getElementById('record-controls').innerHTML = html; }
+function hideRecordUI() {
+  ['record-banner','record-stats','record-controls'].forEach(id => document.getElementById(id).classList.remove('active'));
+  document.getElementById('record-controls').innerHTML = '';
+}
+function clearLiveRecording() {
+  if (state.recordWatch !== null) { navigator.geolocation.clearWatch(state.recordWatch); state.recordWatch = null; }
+  if (state.recordLine) { state.recordLine.remove(); state.recordLine = null; }
+  state.recordVertexMarkers.forEach(m => m.remove());
+  state.recordVertexMarkers = [];
+  state.recording = null;
+  state.recordPaused = false;
+}
+
+/* ============================================================
+   GRAVAÇÃO — trilha (contínua)
+   ============================================================ */
+function startTrailRecording() {
+  closeRecordMenu();
+  if (!navigator.geolocation) { showToast('❌ GPS não disponível'); return; }
+  if (state.recording) { showToast('Já há uma gravação em andamento'); return; }
+  goTo('map');
+  state.recording = { type: 'trail', path: [] };
+  state.recordPaused = false;
+  state.recordLine = L.polyline([], { color: '#e76f51', weight: 4, opacity: 0.95 }).addTo(state.lmap);
+  showRecordUI({ banner: '🔴 Gravando · mantenha o app aberto e a tela ligada', stats: '0 pontos · 0 m' });
+  renderTrailControls();
+  state.recordWatch = navigator.geolocation.watchPosition(
+    onTrailPosition, () => {}, { enableHighAccuracy: true, maximumAge: 1000, timeout: 30000 });
+}
+
+function onTrailPosition(pos) {
+  if (state.recordPaused || !state.recording || state.recording.type !== 'trail') return;
+  const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+  if (accuracy > TRAIL_MAX_ACCURACY_M) return;
+  const path = state.recording.path;
+  if (path.length) {
+    const last = path[path.length - 1];
+    if (geoDistanceMeters(last.lat, last.lng, lat, lng) < TRAIL_MIN_MOVE_M) return;
+  }
+  path.push({ lat, lng });
+  state.recordLine.setLatLngs(path.map(p => [p.lat, p.lng]));
+  updateRecordStats(`${path.length} pontos · ${formatDistance(trailDistanceMeters(path))}`);
+  saveTrailDraft();
+}
+
+function renderTrailControls() {
+  const pauseLabel = state.recordPaused ? '▶ Retomar' : '⏸ Pausar';
+  setRecordControls(
+    `<button class="primary" onclick="toggleTrailPause()">${pauseLabel}</button>
+     <button class="danger" onclick="stopTrailRecording()">■ Encerrar</button>
+     <button onclick="cancelRecording()">✕</button>`);
+}
+function toggleTrailPause() {
+  state.recordPaused = !state.recordPaused;
+  renderTrailControls();
+  showToast(state.recordPaused ? '⏸ Pausado' : '▶ Gravando');
+}
+
+function stopTrailRecording() {
+  const path = (state.recording?.path) || [];
+  if (path.length < 2) { showToast('⚠️ Ande um pouco mais antes de encerrar'); return; }
+  const pending = { type: 'trail', path: [...path], distance_m: trailDistanceMeters(path) };
+  clearLiveRecording(); hideRecordUI(); clearTrailDraft();
+  openSaveFeature(pending);
+}
+
+function cancelRecording() {
+  if (!confirm('Descartar esta gravação?')) return;
+  clearLiveRecording(); hideRecordUI(); clearTrailDraft();
+  showToast('Gravação descartada');
+}
+
+function saveTrailDraft() {
+  if (!state.recording || state.recording.type !== 'trail') return;
+  try { localStorage.setItem(DRAFT_KEY, JSON.stringify(state.recording.path)); } catch (e) {}
+}
+function clearTrailDraft() { try { localStorage.removeItem(DRAFT_KEY); } catch (e) {} }
+function maybeResumeTrailDraft() {
+  let raw; try { raw = localStorage.getItem(DRAFT_KEY); } catch (e) { return; }
+  if (!raw) return;
+  let path; try { path = JSON.parse(raw); } catch (e) { clearTrailDraft(); return; }
+  if (!Array.isArray(path) || path.length < 1) { clearTrailDraft(); return; }
+  if (!confirm(`Há uma trilha não salva (${path.length} pontos). Retomar a gravação?`)) { clearTrailDraft(); return; }
+  goTo('map');
+  state.recording = { type: 'trail', path };
+  state.recordPaused = true;
+  state.recordLine = L.polyline(path.map(p => [p.lat, p.lng]), { color: '#e76f51', weight: 4, opacity: 0.95 }).addTo(state.lmap);
+  showRecordUI({ banner: '🔴 Trilha retomada (pausada)', stats: `${path.length} pontos · ${formatDistance(trailDistanceMeters(path))}` });
+  renderTrailControls();
+  state.recordWatch = navigator.geolocation.watchPosition(
+    onTrailPosition, () => {}, { enableHighAccuracy: true, maximumAge: 1000, timeout: 30000 });
+}
+
+/* ============================================================
+   MARCAÇÃO — área (ponto a ponto)
+   ============================================================ */
+function startAreaMarking() {
+  closeRecordMenu();
+  if (!navigator.geolocation) { showToast('❌ GPS não disponível'); return; }
+  if (state.recording) { showToast('Já há uma marcação em andamento'); return; }
+  goTo('map');
+  state.recording = { type: 'area', path: [] };
+  state.recordLine = L.polygon([], { color: '#48cae4', weight: 2.5, opacity: 0.9, fillColor: '#48cae4', fillOpacity: 0.25 }).addTo(state.lmap);
+  showRecordUI({ banner: '⬡ Marque os cantos da área (mín. 3)', stats: '0 vértices' });
+  renderAreaControls();
+}
+
+function markAreaPoint() {
+  if (!state.recording || state.recording.type !== 'area') return;
+  showToast('📡 Capturando ponto...', 1500);
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      const { latitude: lat, longitude: lng } = pos.coords;
+      const path = state.recording.path;
+      path.push({ lat, lng });
+      const marker = L.marker([lat, lng], {
+        icon: L.divIcon({
+          html: `<div style="background:#48cae4;border:2px solid #fff;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;box-shadow:0 2px 6px rgba(0,0,0,.3)">${path.length}</div>`,
+          className: '', iconSize: [24,24], iconAnchor: [12,12],
+        }),
+        zIndexOffset: 1000,
+      }).addTo(state.lmap);
+      state.recordVertexMarkers.push(marker);
+      state.recordLine.setLatLngs(path.map(p => [p.lat, p.lng]));
+      updateAreaStats();
+      renderAreaControls();
+    },
+    () => showToast('❌ Não foi possível capturar a localização'),
+    { enableHighAccuracy: true, timeout: 15000 }
+  );
+}
+
+function undoAreaPoint() {
+  const path = state.recording?.path || [];
+  if (!path.length) return;
+  path.pop();
+  const m = state.recordVertexMarkers.pop();
+  if (m) m.remove();
+  state.recordLine.setLatLngs(path.map(p => [p.lat, p.lng]));
+  updateAreaStats();
+  renderAreaControls();
+}
+
+function updateAreaStats() {
+  const path = state.recording.path;
+  const txt = path.length >= 3
+    ? `${path.length} vértices · ${formatArea(polygonAreaMeters(path))}`
+    : `${path.length} vértice(s)`;
+  updateRecordStats(txt);
+}
+
+function renderAreaControls() {
+  const n = state.recording?.path.length || 0;
+  const closeBtn = n >= 3
+    ? `<button class="primary" onclick="closeAreaMarking()">⬡ Fechar área</button>`
+    : `<button class="primary" style="opacity:.5" disabled>⬡ Fechar área</button>`;
+  setRecordControls(
+    `<button onclick="markAreaPoint()">📍 Marcar</button>
+     <button onclick="undoAreaPoint()">↶ Desfazer</button>
+     ${closeBtn}
+     <button class="danger" onclick="cancelRecording()">✕</button>`);
+}
+
+function closeAreaMarking() {
+  const path = state.recording?.path || [];
+  if (path.length < 3) { showToast('⚠️ Marque pelo menos 3 pontos'); return; }
+  const pending = { type: 'area', path: [...path],
+    area_m2: polygonAreaMeters(path), perimeter_m: polygonPerimeterMeters(path) };
+  clearLiveRecording(); hideRecordUI();
+  openSaveFeature(pending);
+}
+
 function centerOnUser() {
   if (!navigator.geolocation) { showToast('GPS não disponível neste dispositivo'); return; }
   if (state.userLocationMarker) {
@@ -1111,6 +1741,38 @@ function geoDistanceMeters(lat1, lng1, lat2, lng2) {
   const R = 6371000, dLat = (lat2-lat1)*Math.PI/180, dLng = (lng2-lng1)*Math.PI/180;
   const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
   return R*2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function trailDistanceMeters(path) {
+  let total = 0;
+  for (let i = 1; i < path.length; i++)
+    total += geoDistanceMeters(path[i-1].lat, path[i-1].lng, path[i].lat, path[i].lng);
+  return total;
+}
+function polygonPerimeterMeters(path) {
+  if (!path || path.length < 2) return 0;
+  let total = 0;
+  for (let i = 0, j = path.length - 1; i < path.length; j = i++)
+    total += geoDistanceMeters(path[j].lat, path[j].lng, path[i].lat, path[i].lng);
+  return total;
+}
+function polygonAreaMeters(path) {
+  if (!path || path.length < 3) return 0;
+  const R = 6371000, toRad = d => d * Math.PI / 180;
+  const lat0 = toRad(path.reduce((s,p) => s + p.lat, 0) / path.length);
+  const xy = path.map(p => ({ x: toRad(p.lng) * Math.cos(lat0) * R, y: toRad(p.lat) * R }));
+  let area = 0;
+  for (let i = 0, j = xy.length - 1; i < xy.length; j = i++)
+    area += (xy[j].x + xy[i].x) * (xy[j].y - xy[i].y);
+  return Math.abs(area / 2);
+}
+function formatDistance(m) {
+  if (m == null) return '—';
+  return m < 1000 ? `${Math.round(m)} m` : `${(m/1000).toFixed(2)} km`;
+}
+function formatArea(m2) {
+  if (m2 == null) return '—';
+  return m2 < 10000 ? `${Math.round(m2)} m²` : `${(m2/10000).toFixed(4)} ha`;
 }
 
 function startUserLocationWatch() {
@@ -1157,6 +1819,7 @@ function goTo(view) {
   const navBtn = document.getElementById('nav-' + view);
   if (navBtn) navBtn.classList.add('on');
   if (view === 'points')  { renderFilterChips(); renderPointsList(); }
+  if (view === 'trails')  renderTrailsList();
   if (view === 'summary') renderSummary();
   if (view === 'admin')   renderAdminCategories();
   if (view === 'map' && state.lmap) {
@@ -1254,12 +1917,29 @@ function renderLayersPanel() {
     row.innerHTML = `<label><input type="checkbox" ${visible ? 'checked' : ''} onchange="toggleLayer('${cat.id}', this.checked)"><span>${cat.icon} ${cat.name}</span></label>`;
     list.appendChild(row);
   });
+  const sep = document.createElement('div');
+  sep.className = 'layer-toggle';
+  sep.style.cssText = 'border-top:2px solid var(--line);margin-top:6px;padding-top:10px';
+  sep.innerHTML = `<label><input type="checkbox" ${state.trailsVisible ? 'checked' : ''} onchange="toggleTrailsLayer(this.checked)"><span>🧭 Trilhas</span></label>`;
+  list.appendChild(sep);
+  const areaRow = document.createElement('div');
+  areaRow.className = 'layer-toggle';
+  areaRow.innerHTML = `<label><input type="checkbox" ${state.areasVisible ? 'checked' : ''} onchange="toggleAreasLayer(this.checked)"><span>⬡ Áreas</span></label>`;
+  list.appendChild(areaRow);
 }
 function toggleLayer(catId, visible) {
   state.mapLayersVisible[catId] = visible;
   state.mapMarkers.filter(m => m.catId === catId).forEach(m => {
     if (visible) m.marker.addTo(state.lmap); else m.marker.remove();
   });
+}
+function toggleTrailsLayer(visible) {
+  state.trailsVisible = visible;
+  renderTrailsAreas();
+}
+function toggleAreasLayer(visible) {
+  state.areasVisible = visible;
+  renderTrailsAreas();
 }
 
 /* ============================================================
@@ -1770,8 +2450,26 @@ function exportGeoJSON() {
     properties: { id: pt.id, name: pt.name, category: cats[pt.category_id]?.name || '', description: pt.description || '', importance: pt.importance || '', inside_property: pt.inside_property, created_at: pt.created_at },
   }));
   features.push({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [[...TERRENO_POLYGON.map(v => [v.lng, v.lat]), [TERRENO_POLYGON[0].lng, TERRENO_POLYGON[0].lat]]] }, properties: { name: 'Villa Tropical — Limite do terreno', area_ha: 2.9351 } });
+
+  state.trails.forEach(t => {
+    if (!(t.path||[]).length) return;
+    features.push({
+      type: 'Feature',
+      geometry: { type: 'LineString', coordinates: t.path.map(p => [p.lng, p.lat]) },
+      properties: { id: t.id, kind: 'trail', name: t.name, category: t.categories?.name || '', distance_m: t.distance_m, notes: t.notes || '', created_at: t.created_at },
+    });
+  });
+  state.areas.forEach(a => {
+    if ((a.path||[]).length < 3) return;
+    features.push({
+      type: 'Feature',
+      geometry: { type: 'Polygon', coordinates: [[...a.path.map(p => [p.lng, p.lat]), [a.path[0].lng, a.path[0].lat]]] },
+      properties: { id: a.id, kind: 'area', name: a.name, category: a.categories?.name || '', area_m2: a.area_m2, perimeter_m: a.perimeter_m, notes: a.notes || '', created_at: a.created_at },
+    });
+  });
+
   downloadBlob(JSON.stringify({ type: 'FeatureCollection', features }, null, 2), 'villa-tropical.geojson', 'application/geo+json');
-  showToast(`🌐 GeoJSON exportado`);
+  showToast(`🌐 GeoJSON exportado — ${state.points.length} pontos, ${state.trails.length} trilhas, ${state.areas.length} áreas`);
 }
 
 function downloadBlob(content, filename, mimeType) {
@@ -1792,10 +2490,13 @@ async function init() {
     renderFilterChips();
     initMap();
     renderMapMarkers();
+    renderTrailsAreas();
     renderSummary();
     renderAdminCategories();
     document.getElementById('loading').classList.add('hidden');
     goTo('map');
+    maybeResumeTrailDraft();
+    if (navigator.onLine) syncOfflineQueue();
 
     // Download automático do mapa se ainda não cacheado
     if (navigator.onLine) {
