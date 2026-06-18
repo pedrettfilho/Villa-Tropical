@@ -533,6 +533,8 @@ html, body { overscroll-behavior-y: contain; }
 #ptr-indicator.ready { color: var(--verde-claro); }
 #ptr-indicator.refreshing .ico { animation: ptr-spin .8s linear infinite; }
 @keyframes ptr-spin { to { transform: rotate(360deg); } }
+
+#build-stamp { text-align: center; font-size: 11px; color: var(--muted); opacity: .6; margin: 18px 0 6px; }
 </style>
 </head>
 <body>
@@ -671,11 +673,11 @@ html, body { overscroll-behavior-y: contain; }
 
     <div class="admin-section">
       <div class="admin-section-header">
-        <h3>🗺️ Imóvel</h3>
+        <h3>🗺️ Sítio Villa Tropical (2,9 ha)</h3>
       </div>
       <div class="admin-section-body">
         <div class="property-info">
-          <div class="property-info-row"><span class="key">Nome</span><span class="val">Villa Tropical</span></div>
+          <div class="property-info-row"><span class="key">Nome</span><span class="val">Sítio Villa Tropical</span></div>
           <div class="property-info-row"><span class="key">Área</span><span class="val">2,9351 ha</span></div>
           <div class="property-info-row"><span class="key">Perímetro</span><span class="val">811,51 m</span></div>
           <div class="property-info-row"><span class="key">Localização</span><span class="val">Ibicoara · BA</span></div>
@@ -683,6 +685,24 @@ html, body { overscroll-behavior-y: contain; }
         </div>
       </div>
     </div>
+
+    <div class="admin-section">
+      <div class="admin-section-header">
+        <h3>🗺️ Sítio Sereno da Madrugada (0,5 ha)</h3>
+      </div>
+      <div class="admin-section-body">
+        <div class="property-info">
+          <div class="property-info-row"><span class="key">Nome</span><span class="val">Sítio Sereno da Madrugada</span></div>
+          <div class="property-info-row"><span class="key">Área</span><span class="val">0,5000 ha</span></div>
+          <div class="property-info-row"><span class="key">Perímetro</span><span class="val">363,40 m</span></div>
+          <div class="property-info-row"><span class="key">Localização</span><span class="val">Ibicoara · BA</span></div>
+          <div class="property-info-row"><span class="key">Vértices</span><span class="val">4 pontos (M-0001 a M-0004)</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BUMP a cada deploy -->
+    <p id="build-stamp">versão 2026-06-18 · 15:00</p>
   </div>
 
 </main>
@@ -897,9 +917,9 @@ const IMOVEL_FLAVIO_POLYGON = [
 
 // Imóveis conhecidos (divisas fixas). 'todos' não entra aqui.
 const IMOVEIS = [
-  { id: 'terreno', nome: 'Villa Tropical — Limite do terreno', areaHa: 2.9351,
+  { id: 'terreno', nome: 'Sítio Villa Tropical', areaHa: 2.9351,
     cor: '#40916c', polygon: TERRENO_POLYGON, center: TERRENO_CENTER, zoom: 17 },
-  { id: 'flavio',  nome: 'Imóvel Flávio César (0,5 ha)', areaHa: 0.5,
+  { id: 'flavio',  nome: 'Sítio Sereno da Madrugada', areaHa: 0.5,
     cor: '#f97316', polygon: IMOVEL_FLAVIO_POLYGON,
     center: { lat: -13.40721, lng: -41.24338 }, zoom: 18 },
 ];
@@ -1298,7 +1318,7 @@ function updateImovelButton() {
   const btn = document.getElementById('fab-imovel');
   if (!btn) return;
   const ic = { terreno: '🟢', flavio: '🟠', todos: '🔵' };
-  const tt = { terreno: 'Imóvel: Terreno (2,9 ha)', flavio: 'Imóvel: Flávio (0,5 ha)', todos: 'Imóvel: Todos' };
+  const tt = { terreno: 'Imóvel: Sítio Villa Tropical', flavio: 'Imóvel: Sítio Sereno da Madrugada', todos: 'Imóvel: Todos' };
   btn.textContent = ic[state.imovelAtivo] || '🔵';
   btn.title = tt[state.imovelAtivo] || 'Alternar imóvel';
 }
@@ -2640,7 +2660,7 @@ function exportGeoJSON() {
     geometry: { type: 'Point', coordinates: [pt.longitude, pt.latitude] },
     properties: { id: pt.id, name: pt.name, category: cats[pt.category_id]?.name || '', description: pt.description || '', importance: pt.importance || '', inside_property: pt.inside_property, created_at: pt.created_at },
   }));
-  features.push({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [[...TERRENO_POLYGON.map(v => [v.lng, v.lat]), [TERRENO_POLYGON[0].lng, TERRENO_POLYGON[0].lat]]] }, properties: { name: 'Villa Tropical — Limite do terreno', area_ha: 2.9351 } });
+  features.push({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [[...TERRENO_POLYGON.map(v => [v.lng, v.lat]), [TERRENO_POLYGON[0].lng, TERRENO_POLYGON[0].lat]]] }, properties: { name: 'Sítio Villa Tropical', area_ha: 2.9351 } });
 
   features.push({
     type: 'Feature',
@@ -2649,7 +2669,7 @@ function exportGeoJSON() {
       [IMOVEL_FLAVIO_POLYGON[0].lng, IMOVEL_FLAVIO_POLYGON[0].lat],
     ]] },
     properties: {
-      name: 'Imóvel Flávio César (0,5 ha)',
+      name: 'Sítio Sereno da Madrugada',
       area_ha: 0.5, perimeter_m: 363.40, location: 'Ibicoara · BA',
     },
   });
