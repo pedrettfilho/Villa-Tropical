@@ -579,6 +579,7 @@ h2.sec { font-size: 13px; text-transform: uppercase; letter-spacing: .7px; color
         <button class="map-fab secondary" onclick="toggleRecordMenu()" title="Trilhas e áreas">🧭</button>
         <button class="map-fab secondary" onclick="centerOnUser()" title="Minha localização">⌖</button>
         <button class="map-fab secondary" onclick="toggleLayers()" title="Camadas">≡</button>
+        <button id="fab-imovel" class="map-fab secondary" onclick="cycleImovel()" title="Alternar imóvel">🟢</button>
       </div>
       <div id="record-menu" class="record-menu">
         <button onclick="startTrailRecording()">🧭 Iniciar trilha</button>
@@ -869,9 +870,29 @@ const TERRENO_POLYGON = [
   { lat: -13.4312011, lng: -41.2556486 },
 ];
 
+const IMOVEL_FLAVIO_POLYGON = [
+  { lat: -13.4071558, lng: -41.2441606 }, // M-0001
+  { lat: -13.4068911, lng: -41.2437217 }, // M-0002
+  { lat: -13.4072561, lng: -41.2426275 }, // M-0003
+  { lat: -13.4075278, lng: -41.2430250 }, // M-0004
+];
+
+// Imóveis conhecidos (divisas fixas). 'todos' não entra aqui.
+const IMOVEIS = [
+  { id: 'terreno', nome: 'Villa Tropical — Limite do terreno', areaHa: 2.9351,
+    cor: '#40916c', polygon: TERRENO_POLYGON, center: TERRENO_CENTER, zoom: 17 },
+  { id: 'flavio',  nome: 'Imóvel Flávio César (0,5 ha)', areaHa: 0.5,
+    cor: '#f97316', polygon: IMOVEL_FLAVIO_POLYGON,
+    center: { lat: -13.40721, lng: -41.24338 }, zoom: 18 },
+];
+
 const CACHE_BBOX = {
   minLat: -13.4416, maxLat: -13.4222,
   minLng: -41.2671, maxLng: -41.2460,
+};
+const CACHE_BBOX_IMOVEL = {
+  minLat: -13.4083, maxLat: -13.4061,
+  minLng: -41.2451, maxLng: -41.2418,
 };
 const CACHE_ZOOM_MIN = 14;
 const CACHE_ZOOM_MAX = 18;
@@ -911,6 +932,8 @@ const state = {
   editingCatId: null,
   mapClickMode: false,
   tempCoords: null,
+  imovelAtivo: localStorage.getItem('vt_imovel_ativo') || 'todos',
+  imovelFlavioPolygon: null,
   lmap: null,
   terrainPolygon: null,
   selectedCatColor: CAT_COLORS[0],
@@ -1179,7 +1202,10 @@ function getTileUrls(bbox, zoomMin, zoomMax, key) {
 
 async function downloadMapCache() {
   if (!navigator.onLine) { showToast('❌ Necessário ter internet para baixar o mapa'); return; }
-  const urls = getTileUrls(CACHE_BBOX, CACHE_ZOOM_MIN, CACHE_ZOOM_MAX, MAPTILER_KEY);
+  const urls = [...new Set([
+    ...getTileUrls(CACHE_BBOX,        CACHE_ZOOM_MIN, CACHE_ZOOM_MAX, MAPTILER_KEY),
+    ...getTileUrls(CACHE_BBOX_IMOVEL, CACHE_ZOOM_MIN, CACHE_ZOOM_MAX, MAPTILER_KEY),
+  ])];
   const total = urls.length;
   const progressEl = document.getElementById('cache-progress');
   const fillEl = document.getElementById('cache-progress-fill');
@@ -1231,6 +1257,12 @@ function initMap() {
     fillColor: '#40916c', fillOpacity: 0.12,
   }).addTo(map);
 
+  state.imovelFlavioPolygon = L.polygon(
+    IMOVEL_FLAVIO_POLYGON.map(p => [p.lat, p.lng]),
+    { color: '#f97316', weight: 2.5, opacity: 0.9,
+      fillColor: '#f97316', fillOpacity: 0.12 }
+  ).addTo(map);
+
   map.on('click', (e) => {
     if (!state.mapClickMode) return;
     state.tempCoords = { lat: e.latlng.lat, lng: e.latlng.lng, accuracy: null };
@@ -1241,6 +1273,35 @@ function initMap() {
   state.lmap = map;
   startUserLocationWatch();
   updateStatusBar();
+  updateImovelButton();
+}
+
+function updateImovelButton() {
+  const btn = document.getElementById('fab-imovel');
+  if (!btn) return;
+  const ic = { terreno: '🟢', flavio: '🟠', todos: '🔵' };
+  const tt = { terreno: 'Imóvel: Terreno (2,9 ha)', flavio: 'Imóvel: Flávio (0,5 ha)', todos: 'Imóvel: Todos' };
+  btn.textContent = ic[state.imovelAtivo] || '🔵';
+  btn.title = tt[state.imovelAtivo] || 'Alternar imóvel';
+}
+
+function setImovelAtivo(id) {
+  state.imovelAtivo = id;
+  localStorage.setItem('vt_imovel_ativo', id);
+  const im = IMOVEIS.find(i => i.id === id);
+  if (im && state.lmap) state.lmap.setView([im.center.lat, im.center.lng], im.zoom);
+  updateImovelButton();
+  renderMapMarkers();
+  renderTrailsAreas();
+  if (document.getElementById('view-points').classList.contains('on'))  renderPointsList();
+  if (document.getElementById('view-summary').classList.contains('on')) renderSummary();
+  if (document.getElementById('view-trails').classList.contains('on'))  renderTrailsList();
+  showToast(`📍 ${id === 'todos' ? 'Mostrando todos os imóveis' : 'Imóvel: ' + (im?.nome || id)}`);
+}
+
+function cycleImovel() {
+  const order = ['terreno', 'flavio', 'todos'];
+  setImovelAtivo(order[(order.indexOf(state.imovelAtivo) + 1) % order.length]);
 }
 
 function renderMapMarkers() {
@@ -1249,6 +1310,7 @@ function renderMapMarkers() {
   if (!state.lmap) return;
   state.points.forEach(pt => {
     if (!pt.latitude || !pt.longitude) return;
+    if (!pontoNoImovelAtivo(pt)) return;
     const cat = state.categories.find(c => c.id === pt.category_id) || {};
     const visible = state.mapLayersVisible[pt.category_id] !== false;
     if (!visible) return;
@@ -1281,6 +1343,7 @@ function renderTrailsAreas() {
     const path = a.path || [];
     if (path.length < 3) return;
     if (!state.areasVisible) return;
+    if (!featureNoImovelAtivo(a)) return;
     const color = a.categories?.color || '#40916c';
     const polygon = L.polygon(path.map(p => [p.lat, p.lng]), {
       color, weight: 2.5, opacity: a._offline ? 0.5 : 0.9,
@@ -1294,6 +1357,7 @@ function renderTrailsAreas() {
     const path = t.path || [];
     if (path.length < 2) return;
     if (!state.trailsVisible) return;
+    if (!featureNoImovelAtivo(t)) return;
     const color = t.categories?.color || '#2d6a4f';
     const line = L.polyline(path.map(p => [p.lat, p.lng]), {
       color, weight: 4, opacity: t._offline ? 0.5 : 0.95,
@@ -1398,7 +1462,7 @@ function setTrailsTab(type, btn) {
 function renderTrailsList() {
   const list = document.getElementById('trails-list');
   const type = state.trailsTab;
-  const items = type === 'trail' ? state.trails : state.areas;
+  const items = (type === 'trail' ? state.trails : state.areas).filter(featureNoImovelAtivo);
   if (!items.length) {
     list.innerHTML = `<div class="empty-state">
       <span class="ico">${type === 'trail' ? '🧭' : '⬡'}</span>
@@ -1532,7 +1596,7 @@ async function commitSaveFeature() {
    GRAVAÇÃO — menu e controles compartilhados
    ============================================================ */
 const DRAFT_KEY = 'vt_trail_draft';
-const TRAIL_MIN_MOVE_M = 5;
+const TRAIL_MIN_MOVE_M = 3;
 const TRAIL_MAX_ACCURACY_M = 50;
 
 function toggleRecordMenu() {
@@ -1741,6 +1805,30 @@ function geoDistanceMeters(lat1, lng1, lat2, lng2) {
   const R = 6371000, dLat = (lat2-lat1)*Math.PI/180, dLng = (lng2-lng1)*Math.PI/180;
   const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
   return R*2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+// Imóvel cujo centro está mais próximo da coordenada (imóveis distam ~3 km).
+function imovelDe(lat, lng) {
+  if (lat == null || lng == null) return IMOVEIS[0].id;
+  let best = IMOVEIS[0], bestD = Infinity;
+  for (const im of IMOVEIS) {
+    const d = geoDistanceMeters(lat, lng, im.center.lat, im.center.lng);
+    if (d < bestD) { bestD = d; best = im; }
+  }
+  return best.id;
+}
+function noImovelAtivo(lat, lng) {
+  return state.imovelAtivo === 'todos' || imovelDe(lat, lng) === state.imovelAtivo;
+}
+function pontoNoImovelAtivo(pt) {
+  return noImovelAtivo(pt.latitude, pt.longitude);
+}
+function featureNoImovelAtivo(f) {
+  const p = (f.path || [])[0];
+  return p ? noImovelAtivo(p.lat, p.lng) : true;
+}
+function isInsideAnyImovel(lat, lng) {
+  return IMOVEIS.some(im => isInsidePolygon({ lat, lng }, im.polygon));
 }
 
 function trailDistanceMeters(path) {
@@ -2081,7 +2169,7 @@ async function savePoint() {
     showToast('⚠️ Marque a localização antes de salvar'); return;
   }
 
-  const inside = isInsidePolygon({ lat, lng }, TERRENO_POLYGON);
+  const inside = isInsideAnyImovel(lat, lng);
   const importance = document.querySelector('input[name="pt-importance"]:checked')?.value || 'media';
   const now = new Date();
   const hhmm = now.toTimeString().slice(0,5);
@@ -2239,7 +2327,7 @@ function openEditPoint(pointId) {
    ============================================================ */
 function renderPointsList() {
   const list = document.getElementById('points-list');
-  let pts = [...state.points];
+  let pts = state.points.filter(pontoNoImovelAtivo);
   if (state.filterCat !== 'all') pts = pts.filter(p => p.category_id === state.filterCat);
   if (state.searchQuery) {
     const q = state.searchQuery.toLowerCase();
@@ -2303,11 +2391,12 @@ function renderFilterChips() {
    SUMMARY
    ============================================================ */
 function renderSummary() {
-  document.getElementById('summary-total').textContent = state.points.length;
+  const pts = state.points.filter(pontoNoImovelAtivo);
+  document.getElementById('summary-total').textContent = pts.length;
   const grid = document.getElementById('summary-grid');
   grid.innerHTML = '';
   state.categories.filter(c => c.active).forEach(cat => {
-    const count = state.points.filter(p => p.category_id === cat.id).length;
+    const count = pts.filter(p => p.category_id === cat.id).length;
     if (count === 0) return;
     const card = document.createElement('div');
     card.className = 'summary-cat-card' + (state.summaryFilterCatId === cat.id ? ' on' : '');
@@ -2324,7 +2413,7 @@ function renderSummary() {
   if (recentTitle) recentTitle.textContent = filterCat ? `Categoria: ${filterCat.name}` : 'Últimos adicionados';
   const recent = document.getElementById('summary-recent');
   recent.innerHTML = '';
-  const listPts = state.summaryFilterCatId ? state.points.filter(p => p.category_id === state.summaryFilterCatId) : state.points.slice(0, 5);
+  const listPts = state.summaryFilterCatId ? pts.filter(p => p.category_id === state.summaryFilterCatId) : pts.slice(0, 5);
   if (!listPts.length) { recent.innerHTML = '<p style="color:var(--muted);font-size:14px">Nenhum ponto registrado ainda.</p>'; return; }
   listPts.forEach(pt => {
     const cat = state.categories.find(c => c.id === pt.category_id) || {};
@@ -2450,6 +2539,18 @@ function exportGeoJSON() {
     properties: { id: pt.id, name: pt.name, category: cats[pt.category_id]?.name || '', description: pt.description || '', importance: pt.importance || '', inside_property: pt.inside_property, created_at: pt.created_at },
   }));
   features.push({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [[...TERRENO_POLYGON.map(v => [v.lng, v.lat]), [TERRENO_POLYGON[0].lng, TERRENO_POLYGON[0].lat]]] }, properties: { name: 'Villa Tropical — Limite do terreno', area_ha: 2.9351 } });
+
+  features.push({
+    type: 'Feature',
+    geometry: { type: 'Polygon', coordinates: [[
+      ...IMOVEL_FLAVIO_POLYGON.map(v => [v.lng, v.lat]),
+      [IMOVEL_FLAVIO_POLYGON[0].lng, IMOVEL_FLAVIO_POLYGON[0].lat],
+    ]] },
+    properties: {
+      name: 'Imóvel Flávio César (0,5 ha)',
+      area_ha: 0.5, perimeter_m: 363.40, location: 'Ibicoara · BA',
+    },
+  });
 
   state.trails.forEach(t => {
     if (!(t.path||[]).length) return;
