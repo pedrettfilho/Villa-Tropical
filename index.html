@@ -1647,8 +1647,9 @@ async function commitSaveFeature() {
     if (document.getElementById('view-trails').classList.contains('on')) renderTrailsList();
     showToast('✅ Salvo com sucesso!');
   } catch (err) {
-    console.error(err);
-    showToast('❌ Erro ao salvar. Tente novamente.');
+    console.error('commitSaveFeature:', err);
+    const msg = err?.message || err?.error_description || err?.hint || err?.details || JSON.stringify(err);
+    showToast('❌ ' + msg, 8000);
   } finally {
     btn.disabled = false; btn.textContent = '💾 Salvar';
   }
